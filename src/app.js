@@ -33,7 +33,7 @@ exports.handler = async (event) => {
     const data = await resizeImage(s3Object.Body, sizes[index]);
 
     // Write to S3
-    const objectKey = sizes[index] + Key;
+    const objectKey = sizes[index] + "/" + Key;
     const result = await s3
       .putObject({
         Bucket: process.env.DESTINATION_BUCKETNAME,
