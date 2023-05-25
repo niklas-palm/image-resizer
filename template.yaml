@@ -77,17 +77,9 @@ Resources:
           - Action:
               - s3:GetObject
             Effect: Allow
-            Resource:
-              - !Join
-                - ""
-                - - "arn:aws:s3:::"
-                  - !Ref DestinationBucket
-                  - "/*"
+            Resource: !Sub "arn:aws:s3:::${DestinationBucket}/*"
             Principal:
-              AWS: !Join
-                - ""
-                - - "arn:aws:iam::cloudfront:user/CloudFront Origin Access Identity "
-                  - !Ref CloudFrontOriginAccessIdentity
+              AWS: !Sub "arn:aws:iam::cloudfront:user/CloudFront Origin Access Identity ${CloudFrontOriginAccessIdentity}"
 
   # CDN to front and cache content
   CloudfrontDistribution:
