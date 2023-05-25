@@ -1,0 +1,143 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  image-resizer
+
+  Sample SAM Template for image-resizer
+
+# More info about Globals: https://github.com/awslabs/serverless-application-model/blob/master/docs/globals.rst
+Globals:
+  Function:
+    Timeout: 3
+
+Parameters:
+  SourceBucketName:
+    Type: String
+  DestinationBucketName:
+    Type: String
+
+Resources:
+  SourceBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Ref SourceBucketName
+      Tags:
+        - Key: project
+          Value: image-resize
+
+  DestinationBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Ref DestinationBucketName
+      Tags:
+        - Key: project
+          Value: cdn
+
+  ## Lambda function
+  ResizerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/
+      Handler: app.handler
+      Runtime: nodejs16.x
+      MemorySize: 2048
+      Layers:
+        - !Sub "arn:aws:lambda:${AWS::Region}:175033217214:layer:graphicsmagick:2"
+      Policies:
+        - S3ReadPolicy:
+            BucketName: !Ref SourceBucketName
+        - S3CrudPolicy:
+            BucketName: !Ref DestinationBucketName
+      Environment:
+        Variables:
+          DESTINATION_BUCKETNAME: !Ref DestinationBucket
+      Events:
+        FileUpload:
+          Type: S3
+          Properties:
+            Bucket: !Ref SourceBucket
+            Events: s3:ObjectCreated:*
+            Filter:
+              S3Key:
+                Rules:
+                  - Name: suffix
+                    Value: ".jpg"
+
+  # Identity to allow cloudFront to access our private bucket.
+  CloudFrontOriginAccessIdentity:
+    Type: "AWS::CloudFront::CloudFrontOriginAccessIdentity"
+    Properties:
+      CloudFrontOriginAccessIdentityConfig:
+        Comment: !Ref DestinationBucket
+
+  # Bucket policy that allows the aboe OAI to access the buvket.
+  DestinationBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref DestinationBucket
+      PolicyDocument:
+        Statement:
+          - Action:
+              - s3:GetObject
+            Effect: Allow
+            Resource:
+              - !Join
+                - ""
+                - - "arn:aws:s3:::"
+                  - !Ref DestinationBucket
+                  - "/*"
+            Principal:
+              AWS: !Join
+                - ""
+                - - "arn:aws:iam::cloudfront:user/CloudFront Origin Access Identity "
+                  - !Ref CloudFrontOriginAccessIdentity
+
+  # CDN to front and cache content
+  CloudfrontDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        # Aliases:
+        #   - "hassela.enpalm.se"
+        DefaultCacheBehavior:
+          AllowedMethods: # Which methods to forward to S3
+            - GET
+            - HEAD
+            - OPTIONS
+          CachedMethods: # Which methods to cache responses for at cloudfront
+            - GET
+            - HEAD
+            - OPTIONS
+          Compress: true
+          DefaultTTL: 60 # in seconds
+          MaxTTL: 240 # in seconds
+          MinTTL: 60 # in seconds
+          ViewerProtocolPolicy: redirect-to-https
+          ForwardedValues:
+            Cookies:
+              Forward: none
+            QueryString: false
+          TargetOriginId: s3origin # Unsure what this does, but required property
+        # DefaultRootObject: index.html
+        Enabled: true
+        HttpVersion: http2
+        PriceClass: PriceClass_All
+        Origins:
+          - DomainName: !GetAtt DestinationBucket.RegionalDomainName
+            Id: s3origin
+            S3OriginConfig:
+              OriginAccessIdentity: !Sub origin-access-identity/cloudfront/${CloudFrontOriginAccessIdentity}
+        IPV6Enabled: false
+        # ViewerCertificate:
+        #   AcmCertificateArn: arn:aws:acm:us-east-1:641758013508:certificate/c39e3808-3fbb-4457-80c2-f59039fbfc20
+        #   MinimumProtocolVersion: TLSv1
+        #   SslSupportMethod: sni-only
+      Tags:
+        - Key: project
+          Value: cdn
+
+Outputs:
+  S3BucketName:
+    Value: !Ref DestinationBucket
+  CloudfrontDistributionDomain:
+    Value: !GetAtt CloudfrontDistribution.DomainName
