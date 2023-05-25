@@ -37,7 +37,7 @@ exports.handler = async (event) => {
     const result = await s3
       .putObject({
         Bucket: process.env.DESTINATION_BUCKETNAME,
-        objectKey,
+        Key: objectKey,
         ContentType: "image/jpeg",
         Body: data,
       })
