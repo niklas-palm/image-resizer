@@ -137,7 +137,5 @@ Resources:
           Value: cdn
 
 Outputs:
-  S3BucketName:
-    Value: !Ref DestinationBucket
   CloudfrontDistributionDomain:
     Value: !GetAtt CloudfrontDistribution.DomainName
